@@ -40,7 +40,5 @@ function build()
     cmake --build . || exit $?
 }
 
-if [[ ! "$SKIP_CLANG" ]]; then
-    build clang++ clang || exit $?
-fi
+build clang++ clang || exit $?
 build g++ gcc || exit $?
