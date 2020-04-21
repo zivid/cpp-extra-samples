@@ -1,10 +1,12 @@
 #include <Zivid/Zivid.h>
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 
 namespace
 {
     const int PRINT_WIDTH = 56;
+    const char *RAW_FILE_NAME = "zivid_benchmark_raw.txt";
 
     using HighResClock = std::chrono::high_resolution_clock;
     using Duration = std::chrono::nanoseconds;
@@ -72,6 +74,23 @@ namespace
         return {};
     }
 
+    void createEmptyOutputFile()
+    {
+        std::ofstream rawFile(RAW_FILE_NAME, std::ios::out);
+    }
+
+    void addToRawFile(const std::string &string)
+    {
+        std::ofstream rawFile(RAW_FILE_NAME, std::ios::out | std::ios::app);
+        rawFile << string << std::endl;
+    }
+
+    void printProgress(const int iteration, const int total)
+    {
+        std::cout << "..." << iteration << "/" << total << "   "
+                  << "\r";
+    }
+
     void printSeparationLine(const char &separator, const std::string &followingString)
     {
         std::cout << std::left << std::setfill(separator) << std::setw(PRINT_WIDTH) << followingString << std::endl;
@@ -93,7 +112,7 @@ namespace
         std::cout << std::string((columns - text.size()) / 2, ' ') << text << std::endl;
     }
 
-    void printFormated(const std::vector<std::string> &stringList)
+    void printFormatted(const std::vector<std::string> &stringList)
     {
         std::cout << std::left << std::setfill(' ') << std::setw(32) << stringList.at(0) << std::setw(13)
                   << stringList.at(1) << stringList.at(2) << std::endl;
@@ -120,27 +139,38 @@ namespace
     void printConnectHeader(const size_t numConnects)
     {
         printHeaderLine(numConnects, { "Connecting and disconnecting ", " times each (be patient):" });
+        addToRawFile("Connecting and disconnecting ");
     }
 
     void printCapture3DHeader(const size_t numFrames, const std::vector<Zivid::Settings> &settingsVector)
     {
         const auto filterList = makefilterList(settingsVector);
         printHeaderLine(numFrames, { "Capturing ", " 3D frames:" });
+        addToRawFile("Capturing 3D frames:");
         std::cout << "  exposure time = " << makeSettingList<Zivid::Settings::ExposureTime>(settingsVector)
                   << std::endl;
+        addToRawFile("  exposure time = " + makeSettingList<Zivid::Settings::ExposureTime>(settingsVector));
         std::cout << "  iris settings = " << makeSettingList<Zivid::Settings::Iris>(settingsVector) << std::endl;
-        if(!filterList.empty()) std::cout << "  filters = " << filterList << std::endl;
+        addToRawFile("  iris settings = " + makeSettingList<Zivid::Settings::Iris>(settingsVector));
+        if(!filterList.empty())
+        {
+            std::cout << "  filters = " << filterList << std::endl;
+            addToRawFile("  filters = " + filterList);
+        }
     }
 
     void printAssistedCapture3DHeader(const size_t numFrames)
     {
         printHeaderLine(numFrames, { "Running assisted capture ", " times:" });
+        addToRawFile("Running assisted capture:");
     }
 
     void printCapture2DHeader(const size_t numFrames, const Zivid::Settings2D &settings)
     {
         printHeaderLine(numFrames, { "Capturing ", " 2D frames:" });
+        addToRawFile("Capturing 2D frames:");
         std::cout << "  exposure time = { " << settings.exposureTime().toString() << " }" << std::endl;
+        addToRawFile("  exposure time = " + settings.exposureTime().toString());
     }
 
     void printSaveHeader(const size_t numFrames)
@@ -150,13 +180,13 @@ namespace
 
     void printResultLine(const std::string &name, const Duration &durationMedian, const Duration &durationMean)
     {
-        printFormated({ name, formatDuration(durationMedian), formatDuration(durationMean) });
+        printFormatted({ name, formatDuration(durationMedian), formatDuration(durationMean) });
     }
 
     void printResults(const std::vector<std::string> &names, const std::vector<Duration> &durations)
     {
         printSecondarySeparationLine();
-        printFormated({ "  Time:", "Median", "Mean" });
+        printFormatted({ "  Time:", "Median", "Mean" });
         for(size_t i = 0; i < names.size(); i++)
         {
             printResultLine(names.at(i), durations.at(i + i), durations.at(i + i + 1));
@@ -182,9 +212,9 @@ namespace
     void printNegligableFilters()
     {
         const std::string negligable = "negligible";
-        printFormated({ "  Contrast", negligable, negligable });
-        printFormated({ "  Outlier", negligable, negligable });
-        printFormated({ "  Saturated", negligable, negligable });
+        printFormatted({ "  Contrast", negligable, negligable });
+        printFormatted({ "  Outlier", negligable, negligable });
+        printFormatted({ "  Saturated", negligable, negligable });
     }
 
     void printFilterResults(const std::vector<Duration> &durations)
@@ -209,9 +239,13 @@ namespace
     void printZividInfo(Zivid::Camera camera)
     {
         std::cout << "API: " << Zivid::Version::libraryVersion() << std::endl;
+        addToRawFile("API: " + Zivid::Version::libraryVersion());
         std::cout << "OS: " << OS_NAME << std::endl;
+        addToRawFile("OS: " + std::string(OS_NAME));
         std::cout << "Camera: " << camera << std::endl;
+        addToRawFile("Camera: " + camera.toString());
         std::cout << "Compute device: " << camera.computeDevice() << std::endl;
+        addToRawFile("Compute device: " + camera.computeDevice().toString());
         printPrimarySeparationLine();
         printCentered("Starting Zivid Benchmark");
     }
@@ -267,6 +301,7 @@ namespace
 
         for(size_t i = 0; i < numConnects; i++)
         {
+            printProgress(i + 1, numConnects);
             const auto beforeConnect = HighResClock::now();
             camera.connect();
             const auto afterConnect = HighResClock::now();
@@ -274,7 +309,9 @@ namespace
             const auto afterDisconnect = HighResClock::now();
 
             connectDurations.push_back(afterConnect - beforeConnect);
+            addToRawFile(std::string("3D connect duration: ") + formatDuration(afterConnect - beforeConnect));
             disconnectDurations.push_back(afterDisconnect - afterConnect);
+            addToRawFile(std::string("3D disconnect duration: ") + formatDuration(afterDisconnect - afterConnect));
         }
 
         allDurations.push_back(computeMedianDuration(connectDurations));
@@ -293,6 +330,7 @@ namespace
 
         for(size_t i = 0; i < 5; i++) // Warmup frames
         {
+            printProgress(i + 1, 5);
             const auto frame = Zivid::HDR::capture(camera, settingsVector);
             frame.getPointCloud();
         }
@@ -304,6 +342,7 @@ namespace
 
         for(size_t i = 0; i < numFrames; i++)
         {
+            printProgress(i + 1, numFrames);
             const auto beforeCapture = HighResClock::now();
             const auto frame = Zivid::HDR::capture(camera, settingsVector);
             const auto afterCapture = HighResClock::now();
@@ -311,7 +350,9 @@ namespace
             const auto afterProcess = HighResClock::now();
 
             captureDurations.push_back(afterCapture - beforeCapture);
+            addToRawFile(std::string("capture duration: ") + formatDuration(afterCapture - beforeCapture));
             processDurations.push_back(afterProcess - afterCapture);
+            addToRawFile(std::string("process duration: ") + formatDuration(afterProcess - afterCapture));
             totalDurations.push_back(afterProcess - beforeCapture);
         }
 
@@ -336,6 +377,7 @@ namespace
 
         for(size_t i = 0; i < 5; i++) // Warmup
         {
+            printProgress(i, 5);
             const auto settingsVector{ Zivid::CaptureAssistant::suggestSettings(camera, suggestSettingsParameters) };
         }
 
@@ -348,6 +390,8 @@ namespace
             const auto afterSuggestSettings = HighResClock::now();
 
             suggestSettingsDurations.push_back(afterSuggestSettings - beforeSuggestSettings);
+            addToRawFile(std::string("suggestSettings duration: ")
+                         + formatDuration(afterSuggestSettings - beforeSuggestSettings));
         }
 
         std::vector<Duration> allDurations;
@@ -405,6 +449,7 @@ namespace
 
         for(size_t i = 0; i < 5; i++) // Warmup frames
         {
+            printProgress(i + 1, 5);
             camera.capture2D(settings);
         }
 
@@ -413,11 +458,13 @@ namespace
 
         for(size_t i = 0; i < numFrames; i++)
         {
+            printProgress(i + 1, numFrames);
             const auto beforeCapture = HighResClock::now();
             const auto frame2D = camera.capture2D(settings);
             const auto afterCapture = HighResClock::now();
 
             captureDurations.push_back(afterCapture - beforeCapture);
+            addToRawFile(std::string("2D capture duration: ") + formatDuration(afterCapture - beforeCapture));
         }
         allDurations.push_back(computeMedianDuration(captureDurations));
         allDurations.push_back(computeAverageDuration(captureDurations));
@@ -436,14 +483,17 @@ namespace
         std::vector<std::string> fileNames{ "Zivid3D.zdf", "Zivid3D.ply", "Zivid3D.pcd", "Zivid3D.xyz" };
         for(const auto &fileName : fileNames)
         {
+            addToRawFile(fileName);
             std::vector<Duration> durationsPerFormat;
             for(size_t j = 0; j < numFrames; j++)
             {
+                printProgress(j + 1, numFrames);
                 const auto beforeSave = HighResClock::now();
                 frame.save(fileName);
                 const auto afterSave = HighResClock::now();
 
                 durationsPerFormat.push_back(afterSave - beforeSave);
+                addToRawFile(std::string("save duration: ") + formatDuration(afterSave - beforeSave));
             }
 
             allDurations.push_back(computeMedianDuration(durationsPerFormat));
@@ -474,6 +524,8 @@ int main()
         const std::vector<unsigned int> oneIris{ 21U };
         const std::vector<unsigned int> twoIrises{ 17U, 27U };
         const std::vector<unsigned int> threeIrises{ 14U, 21U, 35U };
+
+        createEmptyOutputFile();
 
         benchmarkConnect(camera, numConnects);
         camera.connect();
